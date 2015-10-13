@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <assert.h>
-#include <strings.h>
+#include <string.h>
 #include "heap.h"
 
 // Helpful Macros
@@ -24,8 +24,6 @@
                                     }
 
 #define GET_ENTRY(index,table) ((heap_entry*)(table+index))
-
-
 
 
 /**
@@ -51,13 +49,14 @@ static void* map_in_pages(int page_count) {
     assert(page_count > 0);
 
     // Call mmmap to get the pages
-    void* addr = mmap(NULL, page_count*PAGE_SIZE, PROT_READ|PROT_WRITE, MAP_ANON|MAP_PRIVATE, -1, 0);
+    void* addr = mmap(NULL, page_count*PAGE_SIZE, 
+        PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
 
     if (addr == MAP_FAILED)
         return NULL;
     else {
         // Clear the memory
-        bzero(addr,page_count*PAGE_SIZE);
+        memset(addr, 0, page_count*PAGE_SIZE);
         
         // Return the address 
         return addr;
@@ -81,22 +80,17 @@ static void map_out_pages(void* addr, int page_count) {
 
 // This is a comparison function that treats keys as signed ints
 int compare_int_keys(register void* key1, register void* key2) {
-    // Cast them as int* and read them in
-    register int key1_v = *((int*)key1);
-    register int key2_v = *((int*)key2);
-
+    assert(key1 != NULL && key2 != NULL);
     // Perform the comparison
-    if (key1_v < key2_v)
-        return -1;
-    else if (key1_v == key2_v)
-        return 0;
-    else
-        return 1;
+    return *((int*)key1) - *((int*)key2);
 }
 
 
 // Creates a new heap
-void heap_create(heap* h, int initial_size, int (*comp_func)(void*,void*)) {
+int heap_create(heap* h, int initial_size, compare_func_t comp_func) {
+    // Check that h is not null
+    if (h == NULL)
+        return -1;
     // Check if we need to setup our globals
     if (PAGE_SIZE == 0) {
         // Get the page size
@@ -114,7 +108,6 @@ void heap_create(heap* h, int initial_size, int (*comp_func)(void*,void*)) {
     if (comp_func == NULL)
         comp_func = compare_int_keys;
 
-
     // Store the compare function
     h->compare_func = comp_func;
 
@@ -127,13 +120,15 @@ void heap_create(heap* h, int initial_size, int (*comp_func)(void*,void*)) {
 
     // Allocate the table
     h->table = (void*)map_in_pages(h->allocated_pages);
+    return 1;
 }
 
 
 // Cleanup a heap
-void heap_destroy(heap* h) {
+int heap_destroy(heap* h) {
     // Check that h is not null
-    assert(h != NULL);
+    if (h == NULL)
+        return 0;
 
     // Map out the table
     map_out_pages(h->table, h->allocated_pages);
@@ -142,11 +137,15 @@ void heap_destroy(heap* h) {
     h->active_entries = 0;
     h->allocated_pages = 0;
     h->table = NULL;
+    return 1;
 }
 
 
 // Gets the size of the heap
 int heap_size(heap* h) {
+    // Check that h is not null
+    if (h == NULL)
+        return -1;
     // Return the active entries
     return h->active_entries;
 }
@@ -161,9 +160,12 @@ int heap_min(heap* h, void** key, void** value) {
     // Get the 0th element
     heap_entry* root = GET_ENTRY(0, h->table);
 
-    // Set the key and value
+    // Set the key and value with checking
+    if (key == NULL)
+        return -1;
     *key = root->key;
-    *value = root->value;
+    if (value != NULL)
+        *value = root->value;
 
     // Success
     return 1;
@@ -171,15 +173,16 @@ int heap_min(heap* h, void** key, void** value) {
 
 
 // Insert a new element
-void heap_insert(heap *h, void* key, void* value) {
-    // Check if this heap is not destoyed
-    assert(h->table != NULL);
+int heap_insert(heap *h, void* key, void* value) {
+    // Check the inputs
+    if (h == NULL || h->table == NULL || key == NULL)
+        return -1;
 
     // Check if we have room
     int max_entries = h->allocated_pages * ENTRIES_PER_PAGE;
     if (h->active_entries + 1 > max_entries) {
         // Get the new number of entries we need
-        int new_size = h->allocated_pages * 2;
+        int new_size = h->allocated_pages << 1;
 
         // Map in a new table
         heap_entry* new_table = map_in_pages(new_size);
@@ -196,7 +199,7 @@ void heap_insert(heap *h, void* key, void* value) {
     }
     
     // Store the comparison function
-    int (*cmp_func)(void*,void*) = h->compare_func;
+    compare_func_t cmp_func = h->compare_func;
 
     // Store the table address
     heap_entry* table = h->table;
@@ -228,7 +231,7 @@ void heap_insert(heap *h, void* key, void* value) {
             current = parent;
 
         // We are done swapping
-        }   else
+        } else
             break;
     }
 
@@ -238,11 +241,17 @@ void heap_insert(heap *h, void* key, void* value) {
 
     // Increase the number of active entries
     h->active_entries++;
+
+    // Success
+    return 1;
 }
 
 
 // Deletes the minimum entry in the heap
 int heap_delmin(heap* h, void** key, void** value) {
+    // Check the input
+    if (h == NULL)
+        return -1;
     // Check there is a minimum
     if (h->active_entries == 0)
         return 0;
@@ -255,8 +264,11 @@ int heap_delmin(heap* h, void** key, void** value) {
     heap_entry* current = GET_ENTRY(current_index, table);
 
     // Store the outputs
+    if (key == NULL)
+        return -1;
     *key = current->key;
-    *value = current->value;
+    if (value != NULL)
+        *value = current->value;
 
     // Reduce the number of active entries
     h->active_entries--;
@@ -276,7 +288,7 @@ int heap_delmin(heap* h, void** key, void** value) {
         heap_entry* right_child;
 
         // Load the comparison function
-        int (*cmp_func)(void*,void*) = h->compare_func;
+        compare_func_t cmp_func = h->compare_func;
 
         // Store the left index
         int left_child_index;
@@ -294,7 +306,7 @@ int heap_delmin(heap* h, void** key, void** value) {
                 if (cmp_func(left_child->key, right_child->key) <= 0) {
 
                     // Swap with the left if it is smaller
-                    if (cmp_func(current->key, left_child->key) == 1) {
+                    if (cmp_func(current->key, left_child->key) > 0) {
                         SWAP_ENTRIES(current,left_child);
                         current_index = left_child_index;
                         current = left_child;
@@ -307,7 +319,7 @@ int heap_delmin(heap* h, void** key, void** value) {
                 } else {
 
                     // Swap with the right if it is smaller
-                    if (cmp_func(current->key, right_child->key) == 1) {
+                    if (cmp_func(current->key, right_child->key) > 0) {
                         SWAP_ENTRIES(current,right_child);
                         current_index = left_child_index+1;
                         current = right_child;
@@ -318,9 +330,8 @@ int heap_delmin(heap* h, void** key, void** value) {
 
                 }
 
-
             // We only have a left child, only do something if the left is smaller
-            } else if (cmp_func(current->key, left_child->key) == 1) {
+            } else if (cmp_func(current->key, left_child->key) > 0) {
                 SWAP_ENTRIES(current,left_child);
                 current_index = left_child_index;
                 current = left_child;
@@ -360,7 +371,10 @@ int heap_delmin(heap* h, void** key, void** value) {
 
 
 // Allows a user to iterate over all entries, e.g. to free() the memory
-void heap_foreach(heap* h, void (*func)(void*,void*)) {
+void heap_foreach(heap* h, void (*func)(void*, void*)) {
+    // Check the inputs
+    if (h == NULL || func == NULL)
+        return;
     // Store the current index and max index
     int index = 0;
     int entries = h->active_entries;
@@ -368,7 +382,7 @@ void heap_foreach(heap* h, void (*func)(void*,void*)) {
     heap_entry* entry;
     heap_entry* table = h->table;
 
-    for (;index<entries;index++) {
+    for (; index < entries; index++) {
         // Get the entry
         entry = GET_ENTRY(index,table);
 

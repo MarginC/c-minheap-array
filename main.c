@@ -1,4 +1,3 @@
-
 #include <unistd.h>
 #include <assert.h>
 #include <stdio.h>
@@ -10,7 +9,7 @@ int main(int argc, char** argv) {
 
     // Create the heap
     heap h;
-    heap_create(&h,0,NULL);
+    heap_create(&h, 0, NULL);
 
     // Maximum
     int count = 10000000; // 10M
@@ -24,14 +23,14 @@ int main(int argc, char** argv) {
 
     // Initialize the first key
     unsigned int val = 42;
-    srand( val);
-    printf("Seed %d\n",val);
+    srand(val);
+    printf("Seed %d\n", val);
 
     // Store that as the minimum
     int min = INT_MAX;
 
     // Use a pseudo-random generator for the other keys
-    for (int i=0;i<count;i++) {
+    for (int i=0; i<count; i++) {
         *(key+i) = rand();
 
         // Check for a new min
@@ -56,9 +55,13 @@ int main(int argc, char** argv) {
         // Verify that the values are getting larger
         if (*prev_key > *min_key) {
             printf("Previous key is greater than current key!\n");
+            break;
         }
         prev_key = min_key;
     }
+
+    if (heap_size(&h) == 0)
+        printf("Verify success!\n");
 
     // Clean up the heap
     heap_destroy(&h);

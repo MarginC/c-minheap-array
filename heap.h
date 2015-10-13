@@ -1,5 +1,6 @@
 /*
  * Author: Armon Dadgar
+ * Update: Zhou Yangchao 2015.10.13
  *
  * Header for the Heap functions and data definitions
  */
@@ -13,10 +14,12 @@ typedef struct heap_entry {
     void* value; // Value for this entry
 } heap_entry;
 
+// Function type for key comparison
+typedef int (*compare_func_t)(void*, void*);
 
 // Main struct for representing the heap
 typedef struct heap {
-    int (*compare_func)(void*, void*); // The key comparison function to use
+    compare_func_t compare_func; // The key comparison function to use
     int active_entries;  // The number of entries in the heap
     int minimum_pages;   // The minimum number of pages to maintain, based on the initial cap.
     int allocated_pages; // The number of pages in memory that are allocated
@@ -34,7 +37,13 @@ typedef struct heap {
  * to a function which treats keys as signed ints. This function must take two keys, given as pointers and return an int.
  * It should return -1 if key 1 is smaller, 0 if they are equal, and 1 if key 2 is smaller.
  */
-void heap_create(heap* h, int initial_size, int (*comp_func)(void*,void*));
+int heap_create(heap* h, int initial_size, int (*comp_func)(void*,void*));
+
+/**
+ * Destroys and cleans up a heap.
+ * @param h The heap to destroy.
+ */
+int heap_destroy(heap* h);
 
 /**
  * Returns the size of the heap
@@ -49,7 +58,7 @@ int heap_size(heap* h);
  * @param key The key of the new entry
  * @param value The value of the new entry
  */
-void heap_insert(heap* h, void* key, void* value);
+int heap_insert(heap* h, void* key, void* value);
 
 /**
  * Returns the element with the smallest key in the heap.
@@ -75,12 +84,6 @@ int heap_delmin(heap* h, void** key, void** value);
  * @param func The function to call on each entry. Should take a void* key and value.
  */
 void heap_foreach(heap* h, void (*func)(void*,void*));
-
-/**
- * Destroys and cleans up a heap.
- * @param h The heap to destroy.
- */
-void heap_destroy(heap* h);
 
 #endif
 
